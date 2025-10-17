@@ -22,6 +22,3 @@ def Symbols_df_maker():
         lenght = len(df)
         df.loc[lenght] = row_data
     df.to_csv("Symbols.csv", index=False)
-
-
-# Symbols_df_maker()
