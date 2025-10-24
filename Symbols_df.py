@@ -22,3 +22,6 @@ def Symbols_df_maker():
         lenght = len(df)
         df.loc[lenght] = row_data
     df.to_csv("Symbols.csv", index=False)
+
+
+# Turn it to a class that fetches tables form any wiki page!!
