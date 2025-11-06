@@ -1,148 +1,165 @@
+"""
+Stock Data Input and Validation Script
+--------------------------------------
+Collects a list of stock tickers from the user, validates them against the S&P 500 list,
+and retrieves date ranges for historical data collection.
+
+Author: Ali Hassanzadeh
+"""
+
 import pandas as pd
+import yfinance as yf
+from datetime import date
 from SP500_Symbol_checker import SP500_Symbol_checker
 
-""" SYMBOLS """
-# N =: number of
 
-N = input("pleas enter the number of the stocks:")
-while type(N) != int:
-    try:
-        N = int(N)
-    except:
-        print("The entry is not an integer!")
-        N = input("pleas enter as integer as the number of the stocks:")
-# print(N)
+class StockDataInput:
+    """Handles user input, symbol validation, and date selection for stock data."""
 
-# Creating list
-test = input(
-    f"If you want to test the program you can use enter 'test' to a lsit of stocks with {N} element randomly made for you. if not enter'N'."
-)
-if test.lower() == test:
-    Set_stocks = SP500_Symbol_checker(None, N).Symbols_random_gen()
-else:
-    print(
-        "Pleas enter the symboles of stoks that you want to be under consideration.\n"
-    )
-    counter = 0
-    Set_stocks = set()
-    for i in range(N):
+    def __init__(self):
+        self.num_stocks = 0
+        self.stock_set = set()
+        self.today = date.today()
+        self.start_date = None
+        self.end_date = None
+        self.min_valid_start = None
+
+    # ---------- Utility Methods ---------- #
+    def get_integer_input(self, prompt):
+        """Ensure integer input from user."""
         while True:
-            counter += 1
-            temp = str(input(f"pleas enter the {i+1}th symbol:"))
-            if SP500_Symbol_checker(temp, 0).Symbols_check():
-                Set_stocks.add(temp.upper())
-                break
-            else:
-                print(f"{temp.upper()} isn't a valid symbol! Try again.")
-            if counter == 3:
-                print(f"First check your symbols! See you.")
-                break
-print(Set_stocks)
-
-"""Start date/ End date"""
-List_stocks = Set_stocks
-import yfinance as yf
-
-# lower bound of Start Date
-min_date = []
-for ticker in List_stocks:
-    ticker_temp = yf.Ticker(ticker)
-    hist = ticker_temp.history(period="max")
-    print(f"The lowest valid date for {ticker} is {hist.index.min()}")
-    hist = str(hist.index.min())
-    hist = str(hist[:9])
-    min_date.append([int(hist[0:4]), int(hist[5:7]), int(hist[8:])])
-print(min(min_date))
-
-# S_date End_date
-
-from datetime import date
-
-today = str(date.today())
-print(f"Note that Format of date is YYYY-MM-DD!, like {today}")
-temp = []
-temp.append(int(today[0:4]))
-temp.append(int(today[5:7]))
-temp.append(int(today[8:]))
-today = temp[:]
-
-print("Given the Start data of each stock enter a valid start data!")
-# tickers = {'AAPL', 'MSFT', 'NVDA', 'GOOGL', 'IBM'}
-
-min_dates = []
-for ticker in List_stocks:
-    ticker_temp = yf.Ticker(ticker)
-    hist = ticker_temp.history(period="max")
-    # print(f"The lowest valid date for {ticker} is {hist.index.min()}")
-    hist = str(hist.index.min())
-    hist = str(hist[:9])
-    min_dates.append([int(hist[0:4]), int(hist[5:7]), int(hist[8:])])
-
-max_date = max(min_dates)
-print(
-    f"Given your ticker(s) list the minimum valid date is {max_date[0]}-{max_date[1]}-{max_date[2]}."
-)
-
-
-def data_format_validation(date):
-
-    for i in range(len(date)):
-        if i in [4, 7]:
-            if date[i] != "-":
-                return False
-        else:
             try:
-                int(date[i])
-            except:
-                return False
-    if int(date[8] + date[9]) > 31 or int(date[5] + date[6]) not in range(0, 13):
-        return False
+                return int(input(prompt))
+            except ValueError:
+                print("❌ Invalid input! Please enter an integer.")
 
-    return True
+    def validate_date_format(self, date_str):
+        """Check if date_str is in valid YYYY-MM-DD format."""
+        if len(date_str) != 10 or date_str[4] != "-" or date_str[7] != "-":
+            return False
+        try:
+            y, m, d = map(int, date_str.split("-"))
+            return (1 <= m <= 12) and (1 <= d <= 31)
+        except ValueError:
+            return False
 
+    def get_date_input(self, prompt, min_limit=None, max_limit=None):
+        """Prompt user for a date and ensure it’s within the valid range."""
+        while True:
+            date_str = input(prompt).strip()
+            if not self.validate_date_format(date_str):
+                print("❌ Invalid date format! Use YYYY-MM-DD.")
+                continue
 
-S_date = str(input(f"Enter Start Date:"))
-temp = S_date
+            y, m, d = map(int, date_str.split("-"))
+            date_list = [y, m, d]
 
-if data_format_validation(S_date):
-    temp = []
-    temp.append([int(S_date[0:4]), int(S_date[5:7]), int(S_date[8:])])
-    S_date = temp[0][:]
-    print(S_date)
-    if S_date < max_date:
-        print(
-            f" Entered data is not in valid range. Start data must be grater than equal {max_date[0]}-{max_date[1]}-{max_date[2]}"
+            if min_limit and date_list < min_limit:
+                print(
+                    f"⚠️ Date must be >= {min_limit[0]}-{min_limit[1]:02d}-{min_limit[2]:02d}."
+                )
+                continue
+            if max_limit and date_list > max_limit:
+                print(
+                    f"⚠️ Date must be <= {max_limit[0]}-{max_limit[1]:02d}-{max_limit[2]:02d}."
+                )
+                continue
+
+            return date_str  # valid date
+
+    # ---------- Main Steps ---------- #
+    def get_number_of_stocks(self):
+        """Ask for number of stocks."""
+        self.num_stocks = self.get_integer_input("Enter the number of stocks: ")
+
+    def get_symbols(self):
+        """Ask user for stock symbols or generate random ones."""
+        choice = (
+            input(
+                f"If you want to test the program, type 'test' to generate {self.num_stocks} random stocks. Otherwise, type 'N': "
+            )
+            .strip()
+            .lower()
         )
-else:
-    print("Entered data is not in accepteable format!")
 
-if S_date[1] < 10:
-    S_date[1] = "0" + str(S_date[1])
-if S_date[2] < 10:
-    S_date[2] = "0" + str(S_date[2])
-S_date = (
-    str(S_date[0]) + "-" + str(S_date[1]) + "-" + str(S_date[2])
-)  # date is changed to string
+        if choice == "test":
+            self.stock_set = SP500_Symbol_checker(
+                None, self.num_stocks
+            ).Symbols_random_gen()
+            print(f"✅ Generated random stocks: {self.stock_set}")
+        else:
+            print("\nEnter the stock symbols you want to analyze.")
+            for i in range(self.num_stocks):
+                for attempt in range(3):
+                    symbol = input(f"Enter symbol {i+1}: ").upper()
+                    if SP500_Symbol_checker(symbol, 0).Symbols_check():
+                        self.stock_set.add(symbol)
+                        break
+                    else:
+                        print(f"❌ {symbol} is not a valid S&P 500 symbol!")
+                else:
+                    print("⚠️ Skipping after 3 invalid attempts.")
+            print(f"\n✅ Final symbol set: {self.stock_set}")
 
-E_date = str(input(f"Enter End Date:"))
+    def find_minimum_valid_start(self):
+        """Find the latest earliest date among selected tickers."""
+        print("\nFetching earliest available dates...")
+        min_dates = []
 
-if data_format_validation(E_date):
-    temp = []
-    temp.append([int(E_date[0:4]), int(E_date[5:7]), int(E_date[8:])])
-    E_date = temp[0][:]
-    print(E_date)
-    if E_date > today:
+        for ticker in self.stock_set:
+            try:
+                ticker_obj = yf.Ticker(ticker)
+                hist = ticker_obj.history(period="max")
+                if hist.empty:
+                    print(f"⚠️ No data found for {ticker}. Skipping.")
+                    continue
+                first_date = hist.index.min().strftime("%Y-%m-%d")
+                y, m, d = map(int, first_date.split("-"))
+                min_dates.append([y, m, d])
+                print(f"📅 Earliest valid date for {ticker}: {first_date}")
+            except Exception as e:
+                print(f"⚠️ Error retrieving data for {ticker}: {e}")
+
+        if not min_dates:
+            raise ValueError("No valid data found for any ticker.")
+
+        self.min_valid_start = max(min_dates)
         print(
-            f" Entered data is not in valid range. Start data must be less than equal {today[0]}-{today[1]}-{today[2]}"
+            f"\n📊 The latest earliest valid date across tickers is "
+            f"{self.min_valid_start[0]}-{self.min_valid_start[1]:02d}-{self.min_valid_start[2]:02d}."
         )
-else:
-    print("Entered data is not in accepteable format!")
 
-if E_date[1] < 10:
-    E_date[1] = "0" + str(E_date[1])
-if E_date[2] < 10:
-    E_date[2] = "0" + str(E_date[2])
+    def get_date_range(self):
+        """Ask user for start and end dates within valid range."""
+        print(f"\nNote: Date format is YYYY-MM-DD (e.g. {self.today})")
 
-E_date = (
-    str(E_date[0]) + "-" + str(E_date[1]) + "-" + str(E_date[2])
-)  # date is changed to string
+        self.start_date = self.get_date_input(
+            "Enter Start Date: ", min_limit=self.min_valid_start
+        )
+        self.end_date = self.get_date_input(
+            "Enter End Date: ",
+            min_limit=[
+                self.min_valid_start[0],
+                self.min_valid_start[1],
+                self.min_valid_start[2],
+            ],
+            max_limit=[self.today.year, self.today.month, self.today.day],
+        )
+
+        print(f"\n✅ Final Date Range: {self.start_date} → {self.end_date}")
+
+    # ---------- Run Full Input Process ---------- #
+    def run(self):
+        """Run the entire user input sequence."""
+        print("=== STOCK DATA INPUT ===")
+        self.get_number_of_stocks()
+        self.get_symbols()
+        self.find_minimum_valid_start()
+        self.get_date_range()
+        print("\n✅ All inputs validated successfully! Ready for data analysis.")
+
+
+# ---------- Main Program ---------- #
+if __name__ == "__main__":
+    stock_input = StockDataInput()
+    stock_input.run()
