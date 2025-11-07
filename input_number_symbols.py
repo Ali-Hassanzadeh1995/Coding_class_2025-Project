@@ -28,7 +28,7 @@ def get_valid_symbols(num_stocks: int) -> set:
 
     if test_input.upper() == "Y":
         # Generate a random set of symbols for testing purposes
-        print(f"\n🧪 Generating {num_stocks} random S&P 500 symbols...")
+        print(f"\n🍪 Generating {num_stocks} random S&P 500 symbols...")
         return SP500_Symbol_checker(None, num_stocks).Symbols_random_gen()
     else:
         print("\nPlease enter the symbols of stocks you want to consider.")
@@ -60,3 +60,20 @@ def get_valid_symbols(num_stocks: int) -> set:
                 break
 
         return set_stocks
+
+
+"""
+N_stocks = get_integer_input("Please enter the number of stocks: ")
+
+# Get the set of stock symbols (either random test or user-entered validated)
+Set_stocks = get_valid_symbols(N_stocks)
+
+if not Set_stocks:
+    print("Execution aborted due to symbol entry error.")
+    exit()
+
+# Convert set to a list for yfinance download
+List_stocks = list(Set_stocks)
+print(f"\n**Selected Stocks:** {List_stocks}\n")
+
+"""
