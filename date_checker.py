@@ -112,8 +112,6 @@ def get_valid_date_input(
 
 
 """
-# --- Main Execution Block ---
-# Assuming these functions are available
 from input_number_symbols import get_integer_input, get_valid_symbols
 
 N_stocks = get_integer_input("Please enter the number of stocks: ")
