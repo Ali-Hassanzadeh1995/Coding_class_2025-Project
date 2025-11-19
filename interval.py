@@ -45,40 +45,40 @@ def set_interval(S_date, E_date):
     return interval
 
 
-from input_number_symbols import get_integer_input, get_valid_symbols
-from date_checker import get_min_valid_date, get_valid_date_input
-from datetime import date, datetime
+if __name__ == "__main__":
+    from input_number_symbols import get_integer_input, get_valid_symbols
+    from date_checker import get_min_valid_date, get_valid_date_input
 
-N_stocks = get_integer_input("Please enter the number of stocks: ")
+    N_stocks = get_integer_input("Please enter the number of stocks: ")
 
-# Get the set of stock symbols (either random test or user-entered validated)
-Set_stocks = get_valid_symbols(N_stocks)
+    # Get the set of stock symbols (either random test or user-entered validated)
+    Set_stocks = get_valid_symbols(N_stocks)
 
-if not Set_stocks:
-    print("Execution aborted due to symbol entry error.")
-    exit()
+    if not Set_stocks:
+        print("Execution aborted due to symbol entry error.")
+        exit()
 
-min_common_date = get_min_valid_date(Set_stocks)
-today_date = date.today()
-print(f"Today's date is: {today_date}")
+    min_common_date = get_min_valid_date(Set_stocks)
+    today_date = date.today()
+    print(f"Today's date is: {today_date}")
 
-# Get and validate the Start Date
-S_date = get_valid_date_input(
-    f"Enter Start Date (YYYY-MM-DD, e.g., 2025-01-01): ",
-    min_date=min_common_date,
-    max_date=today_date,  # Start date should also not be in the future
-)
+    # Get and validate the Start Date
+    S_date = get_valid_date_input(
+        f"Enter Start Date (YYYY-MM-DD, e.g., 2025-01-01): ",
+        min_date=min_common_date,
+        max_date=today_date,  # Start date should also not be in the future
+    )
 
-# Get and validate the End Date
-E_date = get_valid_date_input(
-    f"Enter End Date (YYYY-MM-DD, e.g., 2025-11-07): ",
-    min_date=datetime.strptime(
-        S_date, "%Y-%m-%d"
-    ).date(),  # End date must be >= Start Date
-    max_date=today_date,
-)
+    # Get and validate the End Date
+    E_date = get_valid_date_input(
+        f"Enter End Date (YYYY-MM-DD, e.g., 2025-11-07): ",
+        min_date=datetime.strptime(
+            S_date, "%Y-%m-%d"
+        ).date(),  # End date must be >= Start Date
+        max_date=today_date,
+    )
 
-# Check for a sensible duration (Start Date <= End Date) is handled by min_date in E_date check.
+    # Check for a sensible duration (Start Date <= End Date) is handled by min_date in E_date check.
 
-print(f"\n**Data Range:** {S_date} to {E_date}")
-set_interval(S_date, E_date)
+    print(f"\n**Data Range:** {S_date} to {E_date}")
+    set_interval(S_date, E_date)

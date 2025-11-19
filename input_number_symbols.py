@@ -62,18 +62,16 @@ def get_valid_symbols(num_stocks: int) -> set:
         return set_stocks
 
 
-"""
-N_stocks = get_integer_input("Please enter the number of stocks: ")
+if __name__ == "__main__":
+    N_stocks = get_integer_input("Please enter the number of stocks: ")
 
-# Get the set of stock symbols (either random test or user-entered validated)
-Set_stocks = get_valid_symbols(N_stocks)
+    # Get the set of stock symbols (either random test or user-entered validated)
+    Set_stocks = get_valid_symbols(N_stocks)
 
-if not Set_stocks:
-    print("Execution aborted due to symbol entry error.")
-    exit()
+    if not Set_stocks:
+        print("Execution aborted due to symbol entry error.")
+        exit()
 
-# Convert set to a list for yfinance download
-List_stocks = list(Set_stocks)
-print(f"\n**Selected Stocks:** {List_stocks}\n")
-
-"""
+    # Convert set to a list for yfinance download
+    List_stocks = list(Set_stocks)
+    print(f"\n**Selected Stocks:** {List_stocks}\n")
