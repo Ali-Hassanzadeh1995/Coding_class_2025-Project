@@ -1,230 +1,253 @@
-# Get number of stocks and creating the List of stocks
-
-from input_number_symbols import get_integer_input, get_valid_symbols
-
-N_stocks = get_integer_input("Please enter the number of stocks: ")
-
-# Get the set of stock symbols (either random test or user-entered validated)
-Set_stocks = get_valid_symbols(N_stocks)
-
-if not Set_stocks:
-    print("Execution aborted due to symbol entry error.")
-    exit()
-
-# Convert set to a list for yfinance download
-List_stocks = list(Set_stocks)
-print(f"\n**Selected Stocks:** {List_stocks}\n")
-
-
-# Get and validate the Start Date
+# ==============================================================================
+# 📚 1. Standard Library Imports
+# ==============================================================================
 from datetime import date, datetime
-from date_checker import get_min_valid_date, get_valid_date_input
+import sys
 
-min_common_date = get_min_valid_date(Set_stocks)
-today_date = date.today()
-print(f"Today's date is: {today_date}")
-
-S_date = get_valid_date_input(
-    f"Enter Start Date (YYYY-MM-DD, e.g., 2025-01-01): ",
-    min_date=min_common_date,
-    max_date=today_date,  # Start date should also not be in the future
-)
-
-# Get and validate the End Date
-E_date = get_valid_date_input(
-    f"Enter End Date (YYYY-MM-DD, e.g., 2025-11-07): ",
-    min_date=datetime.strptime(
-        S_date, "%Y-%m-%d"
-    ).date(),  # End date must be >= Start Date
-    max_date=today_date,
-)
-
-# Check for a sensible duration (Start Date <= End Date) is handled by min_date in E_date check.
-
-print(f"\n**Data Range:** {S_date} to {E_date}")
-
-# Interval
-
-from interval import set_interval
-
-interval = set_interval(S_date, E_date)
-
-## ⬇️ 4. Data Download and Initial Return Calculation
-
+# ==============================================================================
+# 📚 2. Third-Party Library Imports
+# ==============================================================================
 import pandas as pd
 import numpy as np
 import yfinance as yf
-from datetime import date, datetime
 import matplotlib.pyplot as plt
+from typing import List, Set, Tuple
 
-print("\n⬇️ Downloading data from Yahoo Finance...")
+# ==============================================================================
+# 📚 3. Helper Module Imports (Assuming these exist and work correctly)
+# ==============================================================================
+from input_number_symbols import get_integer_input, get_valid_symbols
+from date_checker import get_min_valid_date, get_valid_date_input
+from interval import set_interval
 
-# Download data for all stocks in the specified range and interval
-try:
-    data = yf.download(
-        List_stocks,
-        start=S_date,
-        end=E_date,
-        interval=interval,
-        # auto_adjust=False is fine to collect Adj close prise, but yfinance default is True
-        auto_adjust=False,
+
+# ==============================================================================
+# ⬇️ 4. Data Acquisition and Full-Period Metrics Calculation
+# ==============================================================================
+
+
+def execute_analysis():
+    # --- Input Collection ---
+    N_stocks = get_integer_input("Please enter the number of stocks: ")
+
+    # Get the set of stock symbols
+    Set_stocks = get_valid_symbols(N_stocks)
+
+    if not Set_stocks:
+        print("Execution aborted due to symbol entry error.")
+        # Use sys.exit() instead of exit() for cleaner script termination
+        sys.exit()
+
+    List_stocks: List[str] = list(Set_stocks)
+    print(f"\n**Selected Stocks:** {List_stocks}\n")
+
+    # Get and validate Start Date
+    min_common_date = get_min_valid_date(Set_stocks)
+    today_date = date.today()
+    print(f"Today's date is: {today_date}")
+
+    S_date = get_valid_date_input(
+        f"Enter Start Date (YYYY-MM-DD, min: {min_common_date}): ",
+        min_date=min_common_date,
+        max_date=today_date,
     )
-    # Check if data was actually returned
-    if data.empty:
-        raise ValueError("No data returned. Check symbols, dates, and interval limits.")
 
-except Exception as e:
-    print(f"🛑 Error during data download: {e}")
-    exit()
+    # Get and validate End Date
+    S_date_dt = datetime.strptime(S_date, "%Y-%m-%d").date()
+    E_date = get_valid_date_input(
+        f"Enter End Date (YYYY-MM-DD, min: {S_date}): ",
+        min_date=S_date_dt,
+        max_date=today_date,
+    )
 
-# Extract the Adjusted Close prices (most common for return analysis)
-DF_Adj_Close = data["Adj Close"]
+    # Get and validate Interval
+    interval = set_interval(S_date, E_date)
+    print(f"\n**Data Range:** {S_date} to {E_date}, Interval: {interval}")
 
-# Calculate Simple Returns: R_t = (P_t / P_{t-1}) - 1
-DF_simple_return = DF_Adj_Close.pct_change().dropna()
-print("\n--- Simple Returns (First 5 Rows) ---")
-print(DF_simple_return.head())
+    # --- Data Download ---
+    print("\n⬇️ Downloading data from Yahoo Finance...")
+    try:
+        data = yf.download(
+            List_stocks,
+            start=S_date,
+            end=E_date,
+            interval=interval,
+            auto_adjust=False,
+        )
+        if data.empty:
+            raise ValueError(
+                "No data returned. Check symbols, dates, and interval limits."
+            )
 
-# Calculate Logarithmic Returns: r_t = ln(P_t / P_{t-1})
-DF_log_return = np.log(DF_Adj_Close / DF_Adj_Close.shift(1)).dropna()
-DF_log_volatility = DF_log_return.std()
-print("\n--- Log Returns (First 5 Rows) ---")
-print(DF_log_return.head())
-print("\n**Full Period log Volatility (Std Dev):**")
-print(DF_log_volatility)
+    except Exception as e:
+        print(f"🛑 Error during data download: {e}")
+        sys.exit()
 
-# Calculate full period statistics
-DF_simple_mean = DF_simple_return.mean()
-DF_simple_volatility = DF_simple_return.std()
-print("\n**Full Period Simple Mean Return:**")
-print(DF_simple_mean)
-print("\n**Full Period Simple Volatility (Std Dev):**")
-print(DF_simple_volatility)
+    # Extract Adjusted Close prices
+    DF_Adj_Close: pd.DataFrame = data["Adj Close"].copy()
+
+    # Drop rows where any stock has missing data (important for portfolio analysis)
+    DF_Adj_Close.dropna(inplace=True)
+
+    if DF_Adj_Close.empty or len(DF_Adj_Close) < 2:
+        print("🛑 Insufficient valid data after cleaning. Aborting.")
+        sys.exit()
+
+    # --- Full Period Metrics ---
+    DF_simple_return: pd.DataFrame = DF_Adj_Close.pct_change().dropna()
+    DF_log_return: pd.DataFrame = np.log(DF_Adj_Close / DF_Adj_Close.shift(1)).dropna()
+
+    print("\n--- Full Period Statistics ---")
+    print(f"Total Periods Available: {len(DF_Adj_Close)}")
+    print(f"First 5 Simple Returns:\n{DF_simple_return.head()}")
+
+    DF_log_volatility = DF_log_return.std()
+    DF_simple_mean = DF_simple_return.mean()
+    DF_simple_volatility = DF_simple_return.std()
+
+    print("\n**Full Period Log Volatility (Std Dev):**\n", DF_log_volatility)
+    print("\n**Full Period Simple Mean Return:**\n", DF_simple_mean)
+    print("\n**Full Period Simple Volatility (Std Dev):**\n", DF_simple_volatility)
+
+    # --- Rolling Window Analysis Setup ---
+    print(
+        f"\nGiven your data has **{len(DF_Adj_Close)}** periods, enter a time_frame and a time_step."
+    )
+    time_frame = get_integer_input("Enter time_frame (window size, e.g., 20 periods):")
+    time_step = get_integer_input("Enter time_step (periods to step, e.g., 5 periods):")
+
+    # Run the rolling calculation
+    try:
+        (
+            df_abs_log_return_roll,
+            df_log_volatility_roll,
+            df_simple_mean_roll,
+            df_simple_volatility_roll,
+        ) = calculate_rolling_metrics_optimized(DF_Adj_Close, time_frame, time_step)
+
+        print("\n**Rolling Metrics (First 5 Windows):**")
+        print(f"Absolute Log Returns:\n{df_abs_log_return_roll.head()}")
+        print(f"Log Volatility:\n{df_log_volatility_roll.head()}")
+        print(f"Simple Mean Returns:\n{df_simple_mean_roll.head()}")
+        print(f"Simple Volatility:\n{df_simple_volatility_roll.head()}")
+
+    except ValueError as e:
+        print(f"\n🛑 Error in rolling calculation: {e}")
+        sys.exit()
+
+    # --- Visualization ---
+    print("\n🖼️ Generating plots for rolling metrics...")
+    plot_metrics(
+        df_abs_log_return_roll,
+        "Rolling Absolute Logarithmic Return Over Period",
+        time_frame,
+        time_step,
+    )
+    plot_metrics(
+        df_log_volatility_roll,
+        "Rolling Log Volatility (Standard Deviation)",
+        time_frame,
+        time_step,
+    )
+    plot_metrics(
+        df_simple_mean_roll, "Rolling Simple Mean Return", time_frame, time_step
+    )
+    plot_metrics(
+        df_simple_volatility_roll,
+        "Rolling Simple Volatility (Standard Deviation)",
+        time_frame,
+        time_step,
+    )
 
 
-## 📊 5. Rolling Window Analysis
-# Note: The logic for calculating len_day based on interval[0] was complex
-# and potentially inaccurate, so I removed it and simplified the user prompt
-# based on the actual length of the fetched DataFrame.
+# ==============================================================================
+# 📊 5. Optimized Rolling Metric Function (Replaces original manual loop)
+# ==============================================================================
 
 
-def calculate_rolling_metrics(
+def calculate_rolling_metrics_optimized(
     df: pd.DataFrame, time_frame: int, time_step: int
-) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
+) -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, pd.DataFrame]:
     """
-    Calculates rolling log returns, simple mean, and simple volatility
-    over the given time_frame, stepped by time_step.
-
-    Args:
-        df (pd.DataFrame): DataFrame of Adjusted Close prices.
-        time_frame (int): The window size for the rolling calculation.
-        time_step (int): How many periods to step the window forward.
+    Calculates rolling statistics using efficient pandas vectorized operations.
+    The results are stepped by time_step to provide non-overlapping or custom-stepped windows.
 
     Returns:
-        tuple: (df_rolling_log_return, df_rolling_simple_mean, df_rolling_simple_volatility)
+        tuple: (df_rolling_abs_log_return, df_rolling_log_volatility,
+                df_rolling_simple_mean, df_rolling_simple_volatility)
     """
-    # Calculate the number of steps possible
-    total_periods = len(df)
-    if time_frame > total_periods:
+
+    if time_frame > len(df):
         raise ValueError("Time frame is larger than the total number of data points.")
 
-    # Calculate initial offset for a cleaner rolling window if the remainder is not 0
-    residual = (total_periods - time_frame) % time_step
-    steps = (
-        total_periods - time_frame - residual
-    ) // time_step + 1  # +1 to include the last window
+    # Calculate daily returns once
+    df_simple_returns = df.pct_change()
+    df_log_returns = np.log(df / df.shift(1))
 
-    # Initialize DataFrames for results
-    columns = df.columns.tolist()
-    df_rolling_log_return = pd.DataFrame(columns=columns, index=range(steps))
-    df_rolling_log_volatility = pd.DataFrame(columns=columns, index=range(steps))
-    df_rolling_simple_mean = pd.DataFrame(columns=columns, index=range(steps))
-    df_rolling_simple_volatility = pd.DataFrame(columns=columns, index=range(steps))
+    # --- Full Rolling Metrics (Calculated for every day) ---
 
-    # Iterate through the data for the rolling calculation
-    for i in range(steps):
-        # Calculate the start and end index for the current window
-        start_idx = i * time_step
-        end_idx = start_idx + time_frame
+    # Rolling Simple Mean & Volatility (Standard Deviation)
+    df_rolling_simple_mean_full = df_simple_returns.rolling(window=time_frame).mean()
+    df_rolling_simple_volatility_full = df_simple_returns.rolling(
+        window=time_frame
+    ).std()
 
-        # Select the data for the current time frame
-        # We start from the remainder (residual) to ensure clean steps
-        Temp_window = df.iloc[start_idx:end_idx]
+    # Rolling Log Volatility
+    df_rolling_log_volatility_full = df_log_returns.rolling(window=time_frame).std()
 
-        # 1. Rolling Log Return: ln(P_end / P_start) - Note: This is an *absolute* log return over the period,
-        # not the sum/mean of daily log returns.
-        # Temp_window.iloc[-1] is the last price, Temp_window.iloc[0] is the first price.
-        # np.log(P_end / P_start) calculates the log price change over the window.
-        df_rolling_log_return.iloc[i] = np.log(
-            Temp_window.iloc[-1] / Temp_window.iloc[0]
-        )
-        Temp_log_return = np.log(Temp_window / Temp_window.shift(1)).dropna()
-        df_rolling_log_volatility.iloc[i] = Temp_log_return.std()
+    # Rolling Absolute Log Return (ln(P_end / P_start))
+    # P_end is the price at the current index, P_start is the price (time_frame - 1) indices before
+    P_start = df.shift(time_frame - 1)
+    df_rolling_abs_log_return_full = np.log(df / P_start)
 
-        # 2. Calculate Simple Returns for the window
-        Temp_simple_return = Temp_window.pct_change().dropna()
+    # --- Step the Results ---
 
-        # 3. Rolling Simple Mean Return
-        df_rolling_simple_mean.iloc[i] = Temp_simple_return.mean()
+    # Rolling results are valid starting from index (time_frame - 1).
+    start_index = time_frame - 1
 
-        # 4. Rolling Simple Volatility (Standard Deviation)
-        df_rolling_simple_volatility.iloc[i] = Temp_simple_return.std()
+    # Use .iloc slicing to select the values at the desired time_step intervals
+    # .dropna(how='all') ensures no columns with only NaNs are included if the final step is incomplete
+    df_abs_log_return_stepped = df_rolling_abs_log_return_full.iloc[
+        start_index::time_step
+    ].dropna(how="all")
+    df_log_volatility_stepped = df_rolling_log_volatility_full.iloc[
+        start_index::time_step
+    ].dropna(how="all")
+    df_simple_mean_stepped = df_rolling_simple_mean_full.iloc[
+        start_index::time_step
+    ].dropna(how="all")
+    df_simple_volatility_stepped = df_rolling_simple_volatility_full.iloc[
+        start_index::time_step
+    ].dropna(how="all")
 
     return (
-        df_rolling_log_return,
-        df_rolling_log_volatility,
-        df_rolling_simple_mean,
-        df_rolling_simple_volatility,
+        df_abs_log_return_stepped,
+        df_log_volatility_stepped,
+        df_simple_mean_stepped,
+        df_simple_volatility_stepped,
     )
 
 
-# Get rolling window parameters
-print(
-    f"\nGiven your data has **{len(DF_Adj_Close)}** periods, enter a time_frame and a time_step."
-)
-time_frame = get_integer_input("Enter time_frame (window size):")
-time_step = get_integer_input("Enter time_step (periods to step):")
-
-# Calculate rolling metrics
-try:
-    (
-        df_log_retrun_roll,
-        df_log_volatility_roll,
-        df_simple_mean_roll,
-        df_simple_volatility_roll,
-    ) = calculate_rolling_metrics(DF_Adj_Close, time_frame, time_step)
-
-    print("\n**Rolling Log Returns:**")
-    print(df_log_retrun_roll.head())
-    print("\n**Rolling Log volatility:**")
-    print(df_log_volatility_roll.head())
-    print("\n**Rolling Simple Returns:**")
-    print(df_simple_mean_roll.head())
-    print("\n**Rolling Simple Volatility:**")
-    print(df_simple_volatility_roll.head())
-
-except ValueError as e:
-    print(f"\n🛑 Error in rolling calculation: {e}")
-    exit()
+# ==============================================================================
+# 📈 6. Visualization Function
+# ==============================================================================
 
 
-## 📈 6. Visualization
-# Plotting the results
-def plot_metrics(df: pd.DataFrame, title: str):
+def plot_metrics(df: pd.DataFrame, title: str, time_frame: int, time_step: int):
     """Generates and displays a plot for the given DataFrame."""
+    # Ensure index is used for plotting (if it's a date index from the stepping)
+    # The current index is just a step count, which is fine for plotting.
     df.plot(figsize=(12, 6))
-    plt.title(title)
-    plt.xlabel(f"Rolling Step (Time Frame: {time_frame}, Step: {time_step})")
+    plt.title(f"{title}\n(Window Size: {time_frame}, Step: {time_step})")
+    plt.xlabel("End Date of Window")
     plt.ylabel("Value")
     plt.legend(title="Ticker")
     plt.grid(True, linestyle="--", alpha=0.7)
     plt.show()
 
 
-print("\n🖼️ Generating plots for rolling metrics...")
-plot_metrics(df_log_retrun_roll, "Rolling Logarithmic Return Over Period")
-plot_metrics(df_log_volatility_roll, "Rolling Log Volatility (Standard Deviation)")
-plot_metrics(df_simple_mean_roll, "Rolling Simple Mean Return")
-plot_metrics(
-    df_simple_volatility_roll, "Rolling Simple Volatility (Standard Deviation)"
-)
+# ==============================================================================
+# 🏁 7. Main Execution Block
+# ==============================================================================
+if __name__ == "__main__":
+    execute_analysis()
