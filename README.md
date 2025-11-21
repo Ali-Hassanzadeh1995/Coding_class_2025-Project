@@ -36,6 +36,7 @@ Stocks invest
 	|			|		* simple-return (Data-Frame & Chart)
 	|			|		* log-return (Data-Frame & Chart)
 	|			|		* volatility (Data-Frame & Chart)
+	|			|		* log volatility (Data-Frame & Chart)
 	|
 	|---
 	|	
@@ -45,6 +46,7 @@ Stocks invest
 				|		* simple-return (Data-Frame & Chart)
 				|		* log-return (Data-Frame & Chart)
 				|		* volatility (Data-Frame & Chart)
+				|		* log volatility (Data-Frame & Chart)
 				|
 				|____ Optimization Output (Markowitz / MPT):
 				|		* **Sharpe-ratio** (A single risk-adjusted return value for the optimal portfolio)
@@ -60,6 +62,7 @@ Stocks invest
 | **Simple Return** | $R_t = \frac{P_t - P_{t-1}}{P_{t-1}}$ | Measures the percentage change in value from one period to the next. |
 | **Log Return** | $r_t = \ln(\frac{P_t}{P_{t-1}})$ | Used in academic finance for easier calculation of multi-period returns. |
 | **Volatility** | Standard Deviation ($\sigma$) of Returns | Measures the dispersion of returns, used as a proxy for asset risk. |
+| **Log Volatility** | Standard Deviation ($\sigma$) of Log Returns | Measures how much log returns fluctuate; mathematically cleaner risk measure used inquantitative finance. |
 | **Sharpe Ratio** | $SR = \frac{E[R_p] - R_f}{\sigma_p}$ | Measures the excess return (above the risk-free rate, $R_f$) per unit of risk ($\sigma_p$). |
 | **Optimal Weight Vector** | $\mathbf{W}$ that maximizes the Sharpe Ratio | The percentage allocation for each stock that yields the best risk-adjusted return ($\sum w_i = 1$). |
 
