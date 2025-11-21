@@ -66,7 +66,7 @@ try:
         start=S_date,
         end=E_date,
         interval=interval,
-        # auto_adjust=False is fine, but yfinance default is True
+        # auto_adjust=False is fine to collect Adj close prise, but yfinance default is True
         auto_adjust=False,
     )
     # Check if data was actually returned
@@ -87,8 +87,11 @@ print(DF_simple_return.head())
 
 # Calculate Logarithmic Returns: r_t = ln(P_t / P_{t-1})
 DF_log_return = np.log(DF_Adj_Close / DF_Adj_Close.shift(1)).dropna()
+DF_log_volatility = DF_log_return.std()
 print("\n--- Log Returns (First 5 Rows) ---")
 print(DF_log_return.head())
+print("\n**Full Period log Volatility (Std Dev):**")
+print(DF_log_volatility)
 
 # Calculate full period statistics
 DF_simple_mean = DF_simple_return.mean()
@@ -98,89 +101,7 @@ print(DF_simple_mean)
 print("\n**Full Period Simple Volatility (Std Dev):**")
 print(DF_simple_volatility)
 
-## 💸 Sharpe-ratio full period
-risk_free_rate = 0.045  # 4.5% annual risk-free rate
 
-sharpe_df = dict()
-for symbol in DF_simple_mean.index.tolist():
-    sharpe_ratio = (DF_simple_mean[symbol] - risk_free_rate) / DF_simple_volatility[
-        symbol
-    ]
-    sharpe_df[symbol] = [float(sharpe_ratio)]
-
-# Display the result DataFrame
-
-
-def plot_sharpe_ratio_results(
-    sharpe_df: pd.DataFrame, start_date: str, end_date: str, risk_free_rate: float
-) -> None:
-    """
-    Takes a pre-calculated DataFrame of Sharpe Ratios, displays it, and
-    generates a colored bar plot for visual analysis.
-
-    Args:
-        sharpe_df (pd.DataFrame): DataFrame with Ticker as index and
-                                  a column named 'Sharpe Ratio'.
-        start_date (str): Start date of the historical data (YYYY-MM-DD).
-        end_date (str): End date of the historical data (YYYY-MM-DD).
-        risk_free_rate (float): Annual risk-free rate used in the calculation.
-    """
-
-    # Ensure the DataFrame has the correct column and is sorted for display
-    if "Sharpe Ratio" not in sharpe_df.columns:
-        raise ValueError("DataFrame must contain a column named 'Sharpe Ratio'.")
-
-    sharpe_df = sharpe_df.sort_values(by="Sharpe Ratio", ascending=False)
-
-    print("\n" + "=" * 50)
-    print("      🏆 SHARPE RATIO RESULTS 🏆")
-    print("=" * 50)
-
-    # Display the result DataFrame
-    print(sharpe_df.to_markdown(floatfmt=".4f"))
-
-    # --- Plotting the Results ---
-
-    # Create figure and axis
-    fig, ax = plt.subplots(figsize=(10, 6))
-
-    # Plot the bar chart
-    # Use green for positive ratios and red for negative ratios
-    colors = np.where(sharpe_df["Sharpe Ratio"] >= 0, "green", "red")
-    sharpe_df["Sharpe Ratio"].plot(kind="bar", ax=ax, color=colors)
-
-    # Add a line at y=0 for reference
-    ax.axhline(0, color="black", linewidth=0.8, linestyle="--")
-
-    # Set titles and labels
-    ax.set_title(
-        f"Sharpe Ratios ({start_date} - {end_date})\nRisk-Free Rate: {risk_free_rate * 100:.2f}%",
-        fontsize=14,
-    )
-    ax.set_xlabel("Stock Ticker", fontsize=12)
-    ax.set_ylabel("Sharpe Ratio", fontsize=12)
-
-    # Rotate x-axis labels for readability
-    plt.xticks(rotation=0)
-
-    # Display the plot
-    plt.tight_layout()
-    plt.show()
-
-
-# Creating the mock DataFrame
-my_sharpe_ratio_df = pd.DataFrame.from_dict(
-    sharpe_df, orient="index", columns=["Sharpe Ratio"]
-)
-
-# --- Calling the new function ---
-if __name__ == "__main__":
-    plot_sharpe_ratio_results(
-        my_sharpe_ratio_df,
-        start_date=S_date,
-        end_date=E_date,
-        risk_free_rate=risk_free_rate,
-    )
 ## 📊 5. Rolling Window Analysis
 # Note: The logic for calculating len_day based on interval[0] was complex
 # and potentially inaccurate, so I removed it and simplified the user prompt
@@ -216,6 +137,7 @@ def calculate_rolling_metrics(
     # Initialize DataFrames for results
     columns = df.columns.tolist()
     df_rolling_log_return = pd.DataFrame(columns=columns, index=range(steps))
+    df_rolling_log_volatility = pd.DataFrame(columns=columns, index=range(steps))
     df_rolling_simple_mean = pd.DataFrame(columns=columns, index=range(steps))
     df_rolling_simple_volatility = pd.DataFrame(columns=columns, index=range(steps))
 
@@ -236,6 +158,8 @@ def calculate_rolling_metrics(
         df_rolling_log_return.iloc[i] = np.log(
             Temp_window.iloc[-1] / Temp_window.iloc[0]
         )
+        Temp_log_return = np.log(Temp_window / Temp_window.shift(1)).dropna()
+        df_rolling_log_volatility.iloc[i] = Temp_log_return.std()
 
         # 2. Calculate Simple Returns for the window
         Temp_simple_return = Temp_window.pct_change().dropna()
@@ -246,7 +170,12 @@ def calculate_rolling_metrics(
         # 4. Rolling Simple Volatility (Standard Deviation)
         df_rolling_simple_volatility.iloc[i] = Temp_simple_return.std()
 
-    return df_rolling_log_return, df_rolling_simple_mean, df_rolling_simple_volatility
+    return (
+        df_rolling_log_return,
+        df_rolling_log_volatility,
+        df_rolling_simple_mean,
+        df_rolling_simple_volatility,
+    )
 
 
 # Get rolling window parameters
@@ -258,12 +187,21 @@ time_step = get_integer_input("Enter time_step (periods to step):")
 
 # Calculate rolling metrics
 try:
-    df_log_retrun_roll, df_simple_mean_roll, df_simple_volatility_roll = (
-        calculate_rolling_metrics(DF_Adj_Close, time_frame, time_step)
-    )
+    (
+        df_log_retrun_roll,
+        df_log_volatility_roll,
+        df_simple_mean_roll,
+        df_simple_volatility_roll,
+    ) = calculate_rolling_metrics(DF_Adj_Close, time_frame, time_step)
 
     print("\n**Rolling Log Returns:**")
     print(df_log_retrun_roll.head())
+    print("\n**Rolling Log volatility:**")
+    print(df_log_volatility_roll.head())
+    print("\n**Rolling Simple Returns:**")
+    print(df_simple_mean_roll.head())
+    print("\n**Rolling Simple Volatility:**")
+    print(df_simple_volatility_roll.head())
 
 except ValueError as e:
     print(f"\n🛑 Error in rolling calculation: {e}")
@@ -285,6 +223,7 @@ def plot_metrics(df: pd.DataFrame, title: str):
 
 print("\n🖼️ Generating plots for rolling metrics...")
 plot_metrics(df_log_retrun_roll, "Rolling Logarithmic Return Over Period")
+plot_metrics(df_log_volatility_roll, "Rolling Log Volatility (Standard Deviation)")
 plot_metrics(df_simple_mean_roll, "Rolling Simple Mean Return")
 plot_metrics(
     df_simple_volatility_roll, "Rolling Simple Volatility (Standard Deviation)"

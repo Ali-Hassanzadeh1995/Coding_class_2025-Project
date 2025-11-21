@@ -1,0 +1,6 @@
+# Example dependencies for a Financial Analysis Project
+pandas==2.1.4
+numpy==1.26.2
+yfinance==0.2.32  # To fetch stock data
+scipy==1.11.4     # For optimization functions (Markowitz)
+matplotlib==3.8.2 # For plotting charts

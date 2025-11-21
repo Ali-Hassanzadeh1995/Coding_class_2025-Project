@@ -16,11 +16,3 @@ Stocks invest
 					|____ output: simple-return, log-return, volatility (data-frame and charts)
 					|
 					|____ optional output: Sharpe-ratio, Markowitz 
-
-
-Metric,Formula / Concept,Purpose
-Simple Return,Rt​=Pt − 1​Pt​− Pt − 1​​,Measures the percentage change in value from one period to the next.
-Log Return,rt​=ln (Pt − 1​Pt​​),Used in academic finance for easier calculation of multi-period returns.
-Volatility,Standard Deviation (σ) of Returns,"Measures the dispersion of returns, used as a proxy for asset risk."
-Sharpe Ratio,SR=σp​And [ Rp​] − Rf​​,"Measures the excess return (above the risk-free rate,Rf​) per unit of risk (σp​)."
-Optimal Weight Vector,Wthat maximizes the Sharpe Ratio,The percentage allocation for each stock that yields the best risk-adjusted return.
