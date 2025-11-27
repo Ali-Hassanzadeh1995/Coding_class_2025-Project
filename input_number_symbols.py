@@ -14,7 +14,7 @@ def get_integer_input(prompt: str) -> int:
         try:
             return int(user_input)
         except ValueError:
-            print("❌ The entry is not a valid integer! Please try again.")
+            print("❌ The entry is not a valid integer! Please try again.", flush=True)
 
 
 def get_valid_symbols(num_stocks: int) -> set:
@@ -28,10 +28,10 @@ def get_valid_symbols(num_stocks: int) -> set:
 
     if test_input.upper() == "Y":
         # Generate a random set of symbols for testing purposes
-        print(f"\n🍪 Generating {num_stocks} random S&P 500 symbols...")
+        print(f"\n🍪 Generating {num_stocks} random S&P 500 symbols...", flush=True)
         return SP500_Symbol_checker(None, num_stocks).Symbols_random_gen()
     else:
-        print("\nPlease enter the symbols of stocks you want to consider.")
+        print("\nPlease enter the symbols of stocks you want to consider.", flush=True)
         set_stocks = set()
         for i in range(num_stocks):
             # Inner loop for retries on invalid symbol entry
@@ -40,16 +40,25 @@ def get_valid_symbols(num_stocks: int) -> set:
 
                 # Check if the symbol is valid using the custom checker class
                 if SP500_Symbol_checker(temp_symbol, 0).Symbols_check():
-                    set_stocks.add(temp_symbol.upper())
-                    break  # Move to the next symbol
+                    if temp_symbol.upper() not in set_stocks:
+                        set_stocks.add(temp_symbol.upper())
+                        break  # Move to the next symbol
+                    else:
+                        print(
+                            f"❌ '{temp_symbol.upper()}' is a repeated symbol! Enter new one.",
+                            flush=True,
+                        )
+
                 else:
                     print(
-                        f"❌ '{temp_symbol.upper()}' isn't a valid symbol! Try again."
+                        f"❌ '{temp_symbol.upper()}' isn't a valid symbol! Try again.",
+                        flush=True,
                     )
 
                 if attempt == 3:
                     print(
-                        "🛑 Maximum retries reached. Please check your symbols and run again."
+                        "🛑 Maximum retries reached. Please check your symbols and run again.",
+                        flush=True,
                     )
                     return (
                         set()
