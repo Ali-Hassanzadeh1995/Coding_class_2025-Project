@@ -12,59 +12,101 @@ import pandas as pd
 import numpy as np
 import yfinance as yf
 import matplotlib.pyplot as plt
+from scipy.optimize import minimize
 from IPython.display import display
 
 # ==============================================================================
 # 📚 3. Helper Module Imports
 # ==============================================================================
-# Assuming these exist in your local environment
-from input_number_symbols import get_integer_input, get_valid_symbols
-from date_checker import get_min_valid_date, get_valid_date_input
-from interval import set_interval
+try:
+    from input_number_symbols import get_integer_input, get_valid_symbols
+    from date_checker import get_min_valid_date, get_valid_date_input
+    from interval import set_interval
+except ImportError as e:
+    print(f"⚠️ Critical Import Error: {e}")
+    print(
+        "Please ensure 'input_number_symbols.py', 'date_checker.py', and 'interval.py' are in the directory."
+    )
+    sys.exit()
 
 # ==============================================================================
 # ⚙️ 4. Global Constants (Risk-Free Rate)
 # ==============================================================================
-# Using 4.25% Annual Risk-Free Rate as a default proxy
-RISK_FREE_RATE_ANNUAL = 4.25
+RISK_FREE_RATE_PERCENT = 4.25  # e.g., 4.25
+RISK_FREE_RATE_DECIMAL = 4.25 / 100.0  # e.g., 0.0425
 
 
 # ==============================================================================
-# ⬇️ 5. Optimized Rolling Metric Function
+# 🧮 5. Calculation Functions
 # ==============================================================================
 
 
 def calculate_rolling_metrics_optimized(
     df: pd.DataFrame, time_frame: int, time_step: int, coefficient: int
 ) -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
-    """
-    Calculates rolling Mean, Volatility, and Sharpe Ratio.
-    """
+    """Calculates rolling Mean, Volatility, and Sharpe Ratio (Script 1 Logic)."""
     if time_frame > len(df):
         raise ValueError("Time frame is larger than the total number of data points.")
 
-    # Calculate simple returns
     df_simple_returns = df.pct_change() * 100
     df_simple_returns = df_simple_returns.dropna()
 
-    # 1. Calculate Rolling Mean & Volatility
     df_rolling_mean = df_simple_returns.rolling(window=time_frame).mean()
     df_rolling_vol = df_simple_returns.rolling(window=time_frame).std()
 
-    # 2. Calculate Rolling Sharpe Ratio
-    # Formula: (Rolling Mean - Daily Risk Free) / Rolling Volatility
-    Rf_per_period = (1 + RISK_FREE_RATE_ANNUAL) ** (1 / coefficient) - 1
+    Rf_per_period = (1 + RISK_FREE_RATE_PERCENT / 100) ** (1 / coefficient) - 1
+    Rf_per_period_perc = Rf_per_period * 100
+
     df_rolling_sharpe = (
-        (df_rolling_mean - Rf_per_period) / df_rolling_vol * np.sqrt(coefficient)
+        (df_rolling_mean - Rf_per_period_perc) / df_rolling_vol * np.sqrt(coefficient)
     )
 
-    # 3. Step the results to reduce data density for plotting
     start_index = time_frame - 1
     df_mean_stepped = df_rolling_mean.iloc[start_index::time_step].dropna(how="all")
     df_vol_stepped = df_rolling_vol.iloc[start_index::time_step].dropna(how="all")
     df_sharpe_stepped = df_rolling_sharpe.iloc[start_index::time_step].dropna(how="all")
 
     return (df_mean_stepped, df_vol_stepped, df_sharpe_stepped)
+
+
+def calculate_sharpe_ratio(
+    weights,
+    mean_returns_decimal,
+    cov_matrix_decimal,
+    risk_free_rate_annual,
+    coefficient,
+):
+    """Calculates the annualized Sharpe Ratio (Script 2 Logic)."""
+    annual_return = np.sum(mean_returns_decimal * weights) * coefficient
+    annual_volatility = np.sqrt(
+        np.dot(weights.T, np.dot(cov_matrix_decimal, weights))
+    ) * np.sqrt(coefficient)
+
+    if annual_volatility == 0:
+        return 0.0
+
+    sharpe_ratio = (annual_return - risk_free_rate_annual) / annual_volatility
+    return sharpe_ratio
+
+
+def negative_sharpe_ratio(
+    weights,
+    mean_returns_decimal,
+    cov_matrix_decimal,
+    risk_free_rate_annual,
+    coefficient,
+):
+    """Objective function for minimization."""
+    if not np.isclose(np.sum(weights), 1.0):
+        pass
+    sharpe = calculate_sharpe_ratio(
+        weights,
+        mean_returns_decimal,
+        cov_matrix_decimal,
+        risk_free_rate_annual,
+        coefficient,
+    )
+    return -sharpe
 
 
 # ==============================================================================
@@ -81,41 +123,52 @@ def plot_metrics(
     time_step: int = None,
     value_label: str = None,
 ):
-    """Generates and displays a plot (Line or Bar) for the given DataFrame."""
     try:
-        # Create figure
         plt.figure(figsize=(12, 6))
-
         full_title = title
         x_label = "Date"
+        color = None
 
         if is_rolling:
             full_title += f"\n(Window Size: {time_frame}, Step: {time_step})"
             x_label = "End Date of Rolling Window"
 
-        # Plot Logic
         if kind == "bar":
-            # Bar chart for scalar comparisons (Full Period)
-            # We use a distinct color (e.g., orange) for volatility if indicated in title, otherwise default
             if "Volatility" in title:
                 color = "red"
             elif "Sharpe" in title:
                 color = "blue"
+            elif "Mean" in title:
+                color = "green"
 
-            df.plot(
-                kind="bar", figsize=(12, 6), color=color, alpha=0.8, edgecolor="black"
+            ax = df.plot(
+                kind="bar",
+                figsize=(12, 6),
+                color=color,
+                alpha=0.8,
+                edgecolor="black",
+                legend=False,
             )
-            plt.axhline(0, color="black", linewidth=0.8)  # Add zero line
+            plt.axhline(0, color="black", linewidth=0.8)
             x_label = "Symbols"
             plt.xticks(rotation=0)
+
+            for p in ax.patches:
+                ax.annotate(
+                    f"{p.get_height():.4f}",
+                    (p.get_x() + p.get_width() / 2.0, p.get_height()),
+                    ha="center",
+                    va="bottom",
+                    fontsize=9,
+                    color="black",
+                    xytext=(0, 5),
+                    textcoords="offset points",
+                )
         else:
-            # Line chart for time series (Rolling)
             plt.plot(df)
             x_label = "Date"
-        if value_label:
-            y_label = value_label
-        else:
-            y_label = "Value"
+
+        y_label = value_label if value_label else "Value"
 
         plt.title(full_title, fontsize=16)
         plt.xlabel(x_label, fontsize=12)
@@ -125,17 +178,13 @@ def plot_metrics(
             plt.legend(
                 df.columns, title="Symbols", bbox_to_anchor=(1.05, 1), loc="upper left"
             )
-        else:
-            # For bar charts, the legend is often redundant if the x-axis labels are clear,
-            # but we keep it for consistency or disable if single metric.
-            pass
 
         plt.grid(True, linestyle="--", alpha=0.6)
         plt.tight_layout()
         plt.show()
 
     except Exception as e:
-        print(f"⚠️ Could not generate plot for '{title}'. Error: {e}")
+        print(f"⚠️ Could not generate plot for '{title}'. Error: {e}", file=sys.stderr)
 
 
 # ==============================================================================
@@ -144,8 +193,33 @@ def plot_metrics(
 
 
 def execute_analysis():
-    # --- Input Collection ---
+    print("=========================================")
+    print("   🚀 FINANCIAL ANALYSIS TOOLKIT V1.0    ")
+    print("=========================================\n")
+
+    # ---------------------------------------------------------
+    # PART A: SELECT MODE (Moved to the start)
+    # ---------------------------------------------------------
+    print("Please select your Analysis Mode:")
+    print("[1] Individual Stock Analysis (Rolling Mean, Volatility, Sharpe)")
+    print("[2] Portfolio Optimization (Weights, Covariance, Markowitz)")
+
+    mode = input("Enter 1 or 2: ").strip()
+
+    if mode not in ["1", "2"]:
+        print("🛑 Invalid mode selection. Exiting.")
+        sys.exit()
+
+    # ---------------------------------------------------------
+    # PART B: Input Collection & Data Download
+    # ---------------------------------------------------------
+    print("\n--- Data Configuration ---")
     N_stocks = get_integer_input("Please enter the number of stocks: ")
+
+    # Validation hint for Portfolio Mode
+    if mode == "2" and N_stocks < 2:
+        print("⚠️ Note: Portfolio optimization typically requires 2 or more stocks.")
+
     Set_stocks: Set[str] = get_valid_symbols(N_stocks)
 
     if not Set_stocks:
@@ -155,6 +229,7 @@ def execute_analysis():
     List_stocks: List[str] = list(Set_stocks)
     print(f"\n**Selected Stocks:** {List_stocks}\n")
 
+    # Date Collection
     min_common_date = get_min_valid_date(Set_stocks)
     today_date = date.today()
     S_date = get_valid_date_input(
@@ -171,7 +246,7 @@ def execute_analysis():
     interval, coefficient = set_interval(S_date, E_date)
     print(f"\n**Data Range:** {S_date} to {E_date}, Interval: {interval}")
 
-    # --- Data Download & Pre-processing ---
+    # Data Download
     print("\n⬇️ Downloading data from Yahoo Finance...")
     try:
         data = yf.download(
@@ -180,150 +255,283 @@ def execute_analysis():
         if data.empty:
             raise ValueError("No data returned.")
     except Exception as e:
-        print(f"🛑 Error during data download: {e}")
+        print(f"🛑 Error during data download: {e}", file=sys.stderr)
         sys.exit()
 
     # Extract Adjusted Close
     DF_Adj_Close: pd.DataFrame = data["Adj Close"].copy()
     DF_Adj_Close.dropna(inplace=True)
-    display(DF_Adj_Close)
-    plot_metrics(
-        DF_Adj_Close,
-        "Adjust close price Time Series (Full Period)",
-        is_rolling=False,
-        kind="line",
-        value_label="Dollars",
-    )
 
     if DF_Adj_Close.empty or len(DF_Adj_Close) < 2:
         print("🛑 Insufficient valid data. Aborting.")
         sys.exit()
 
-    # 1. Calculate Simple Returns
-    DF_simple_return: pd.DataFrame = DF_Adj_Close.pct_change() * 100
-    DF_simple_return = DF_simple_return.dropna()
-    print("\n📊 Simple Returns (Sample):")
-    display(DF_simple_return.head())
-
-    # 2. Choose Analysis Mode
-    print(
-        "\n🌕🌔🌓🌒🌑 Choose Analysis Mode: Full Period (Y) or Rolling Time Frame (N)."
+    # Initial Plot
+    display(DF_Adj_Close.head())
+    plot_metrics(
+        DF_Adj_Close,
+        "Adjusted Close Price Time Series",
+        is_rolling=False,
+        kind="line",
+        value_label="Price (Dollars)",
     )
-    option = str(input("Do you want full-period results? (Y/N): "))
 
-    if option.upper() == "Y":
-        # === FULL PERIOD ANALYSIS ===
+    # ---------------------------------------------------------
+    # PART C: Execute Selected Mode Logic
+    # ---------------------------------------------------------
 
-        # Calculate Mean and Volatility
-        df_mean_full = DF_simple_return.mean().to_frame("Mean Return")
-        df_vol_full = DF_simple_return.std().to_frame("Volatility")
+    # ==============================================================================
+    # MODE 1: Individual Stock Analysis
+    # ==============================================================================
+    if mode == "1":
+        print("\n🔵 STARTING INDIVIDUAL STOCK ANALYSIS")
 
-        # Calculate Sharpe Ratio (Vectorized)
-        Rf_per_period = (1 + RISK_FREE_RATE_ANNUAL) ** (1 / coefficient) - 1
-        df_sharpe_full = (
-            (df_mean_full["Mean Return"] - Rf_per_period)
-            / df_vol_full["Volatility"]
-            * np.sqrt(coefficient)
-        )
-        df_sharpe_full = df_sharpe_full.to_frame("Sharpe Ratio")
+        DF_simple_return: pd.DataFrame = DF_Adj_Close.pct_change() * 100
+        DF_simple_return = DF_simple_return.dropna()
 
-        # Combine for Display
-        df_results = pd.concat([df_mean_full, df_vol_full, df_sharpe_full], axis=1)
+        print("\n📊 Simple Returns (Sample):")
+        display(DF_simple_return.head())
 
-        print("\n📊 Full Period Metrics:")
-        display(df_results)
-
-        # Plot 1: Simple Return Time Series (Line)
-        plot_metrics(
-            DF_simple_return,
-            "Simple Return Time Series (Full Period)",
-            is_rolling=False,
-            kind="line",
-        )
-
-        # Plot 2: Volatility Comparison (Bar - NEW)
-        print("\n📊 Visualizing Volatility Comparison...")
-        plot_metrics(
-            df_vol_full,
-            "Full Period Volatility Comparison",
-            is_rolling=False,
-            kind="bar",
-        )
-
-        # Plot 3: Sharpe Ratio Comparison (Bar)
-        print("\n📊 Visualizing Sharpe Ratio Comparison...")
-        plot_metrics(
-            df_sharpe_full,
-            "Full Period Sharpe Ratio Comparison",
-            is_rolling=False,
-            kind="bar",
-        )
-
-    else:
-        # === ROLLING TIME FRAME ANALYSIS ===
-
-        print(
-            f"\nGiven your data has **{len(DF_Adj_Close)}** periods, enter a time_frame and a time_step."
-        )
-        time_frame = get_integer_input(
-            "Enter time_frame (window size, e.g., 20 periods):"
-        )
-        time_step = get_integer_input(
-            "Enter time_step (periods to step, e.g., 5 periods):"
-        )
-
-        try:
-            (df_mean_roll, df_vol_roll, df_sharpe_roll) = (
-                calculate_rolling_metrics_optimized(
-                    DF_Adj_Close, time_frame, time_step, coefficient
+        option = (
+            str(
+                input(
+                    "\nDo you want Full-Period results (Y) or Rolling Time Frame (N)? (Y/N): "
                 )
             )
+            .strip()
+            .upper()
+        )
 
-            # Visualization
-            print("\n💹 Generating plots for rolling metrics...")
+        if option == "Y":
+            # Full Period
+            df_mean_full = DF_simple_return.mean().to_frame("Mean Return")
+            df_vol_full = DF_simple_return.std().to_frame("Volatility")
 
-            # Line Chart: Mean Return
-            print("\n📈 Rolling Simple Mean Return:")
-            display(df_mean_roll)
+            Rf_per_period = (1 + RISK_FREE_RATE_PERCENT / 100) ** (1 / coefficient) - 1
+            Rf_per_period_perc = Rf_per_period * 100
 
+            df_sharpe_full = (
+                (df_mean_full["Mean Return"] - Rf_per_period_perc)
+                / df_vol_full["Volatility"]
+                * np.sqrt(coefficient)
+            )
+            df_sharpe_full = df_sharpe_full.to_frame("Sharpe Ratio")
+
+            df_results = pd.concat([df_mean_full, df_vol_full, df_sharpe_full], axis=1)
+            print("\n📊 Full Period Metrics:")
+            display(df_results)
+
+            plot_metrics(DF_simple_return, "Simple Return Time Series", False, "line")
+            plot_metrics(df_vol_full, "Full Period Volatility Comparison", False, "bar")
             plot_metrics(
-                df_mean_roll,
-                "Rolling Simple Mean Return",
-                is_rolling=True,
-                kind="line",
-                time_frame=time_frame,
-                time_step=time_step,
-                value_label="Percent per period",
+                df_sharpe_full, "Full Period Sharpe Ratio Comparison", False, "bar"
             )
 
-            # Line Chart: Volatility
-            print("\n📉 Rolling volatility:")
-            display(df_vol_roll)
-            plot_metrics(
-                df_vol_roll,
-                "Rolling Volatility",
-                is_rolling=True,
-                kind="line",
-                time_frame=time_frame,
-                time_step=time_step,
-                value_label="Percent per period",
+        else:
+            # Rolling Period
+            print(f"\nGiven your data has **{len(DF_Adj_Close)}** periods.")
+            time_frame = get_integer_input("Enter time_frame (window size, e.g., 20): ")
+            time_step = get_integer_input(
+                "Enter time_step (periods to step, e.g., 5): "
             )
 
-            # Line Chart: Sharpe Ratio
-            print("\n⚖️ Rolling Sharpe Ratio:")
-            display(df_sharpe_roll)
-            plot_metrics(
-                df_sharpe_roll,
-                "Rolling Sharpe Ratio",
-                is_rolling=True,
-                kind="line",
-                time_frame=time_frame,
-                time_step=time_step,
-            )
+            try:
+                (df_mean_roll, df_vol_roll, df_sharpe_roll) = (
+                    calculate_rolling_metrics_optimized(
+                        DF_Adj_Close, time_frame, time_step, coefficient
+                    )
+                )
+                print("\n💹 Generating plots for rolling metrics...")
+                plot_metrics(
+                    df_mean_roll,
+                    "Rolling Simple Mean Return",
+                    True,
+                    "line",
+                    time_frame,
+                    time_step,
+                    "Percent per period",
+                )
+                plot_metrics(
+                    df_vol_roll,
+                    "Rolling Volatility",
+                    True,
+                    "line",
+                    time_frame,
+                    time_step,
+                    "Percent per period",
+                )
+                plot_metrics(
+                    df_sharpe_roll,
+                    "Rolling Sharpe Ratio",
+                    True,
+                    "line",
+                    time_frame,
+                    time_step,
+                )
 
-        except ValueError as e:
-            print(f"\n🛑 Error in rolling calculation: {e}")
+            except ValueError as e:
+                print(f"\n🛑 Error in rolling calculation: {e}")
+                sys.exit()
+
+    # ==============================================================================
+    # MODE 2: Portfolio Analysis
+    # ==============================================================================
+    elif mode == "2":
+        print("\n🟣 STARTING PORTFOLIO OPTIMIZATION")
+
+        # 1. Weights
+        option = (
+            input(
+                "Do you want to enter a custom weight vector? (Y/N, default is N for equal weight): "
+            )
+            .strip()
+            .upper()
+        )
+
+        total_amount_input = input(
+            f"Enter the total amount to invest (default: 1000 euros): "
+        )
+        try:
+            total_amount = float(total_amount_input)
+        except ValueError:
+            total_amount = 1000.0
+            print(f"Invalid amount entered. Defaulting to {total_amount:.2f} euros.")
+
+        weight = np.zeros(N_stocks)
+        if option == "Y":
+            print("\n**Entering Custom Weights** (Must be non-negative)")
+            for i in range(N_stocks):
+                while True:
+                    weight_input = input(
+                        f"Enter the weight of {List_stocks[i]} (e.g., 0.1): "
+                    )
+                    try:
+                        w = float(weight_input)
+                        if w < 0:
+                            print("Weight must be non-negative.")
+                            continue
+                        weight[i] = w
+                        break
+                    except ValueError:
+                        print("Invalid number. Try again.")
+        else:
+            weight = np.array([1.0 / N_stocks] * N_stocks)
+            print("\n**Using Equal Weights.**")
+
+        sum_weight = np.sum(weight)
+        if sum_weight == 0:
+            print("🛑 Total weight is zero. Aborting.")
             sys.exit()
+        normal_w = weight / sum_weight
+        print(f"Normalized weights: {dict(zip(List_stocks, normal_w))}")
+
+        # 2. Portfolio Calculation
+        DF_simple_return: pd.DataFrame = DF_Adj_Close.pct_change() * 100
+        DF_simple_return = DF_simple_return.dropna()
+
+        portfolio_daily_returns_perc: pd.Series = DF_simple_return.dot(normal_w)
+
+        DF_Prt_value_daily = pd.DataFrame(
+            index=portfolio_daily_returns_perc.index,
+            columns=["The daily value of the portfolio"],
+        )
+        current_portfolio_value = total_amount
+        for i in portfolio_daily_returns_perc.index:
+            current_portfolio_value = current_portfolio_value * (
+                1 + portfolio_daily_returns_perc.loc[i] / 100.0
+            )
+            DF_Prt_value_daily.loc[i] = current_portfolio_value
+
+        print("\n💰 Daily Portfolio Value:")
+        display(DF_Prt_value_daily.head())
+        plot_metrics(
+            DF_Prt_value_daily,
+            "Portfolio Value Time Series",
+            False,
+            "line",
+            value_label="Value (Currency)",
+        )
+
+        # 3. Metrics
+        df_cov = DF_simple_return.cov()
+        cov_matrix = df_cov.to_numpy()
+        cov_matrix_decimal = cov_matrix / 10000.0  # Convert from %^2 to decimal^2
+
+        volatility_annual_decimal = np.sqrt(
+            np.dot(normal_w.T, np.dot(cov_matrix_decimal, normal_w))
+        ) * np.sqrt(coefficient)
+        volatility_annual_perc = volatility_annual_decimal * 100.0
+        print(
+            f"\n✨ Current Annualized Portfolio Volatility: {volatility_annual_perc:.4f}%"
+        )
+
+        mean_returns_decimal = DF_simple_return.mean() / 100.0
+        portfolio_return_annual_decimal = (
+            np.sum(mean_returns_decimal * normal_w) * coefficient
+        )
+
+        sharpe_ratio_full = (
+            portfolio_return_annual_decimal - RISK_FREE_RATE_DECIMAL
+        ) / volatility_annual_decimal
+
+        df_sharpe_full = pd.DataFrame(
+            {"Portfolio": sharpe_ratio_full}, index=["Sharpe Ratio"]
+        ).T
+        print("\n⭐ Full Period Portfolio Annualized Sharpe Ratio:")
+        display(df_sharpe_full)
+        plot_metrics(
+            df_sharpe_full,
+            "Current Portfolio Sharpe Ratio",
+            False,
+            "bar",
+            value_label="Sharpe Ratio",
+        )
+
+        # 4. Optimization
+        print("\n⚙️ Starting Markowitz Optimization (Maximize Sharpe Ratio)...")
+        num_assets = len(List_stocks)
+        bounds = tuple((0, 1) for _ in range(num_assets))
+        constraints = {"type": "eq", "fun": lambda weights: np.sum(weights) - 1}
+        initial_weights = normal_w
+
+        optimal_results = minimize(
+            negative_sharpe_ratio,
+            initial_weights,
+            args=(
+                mean_returns_decimal,
+                cov_matrix_decimal,
+                RISK_FREE_RATE_DECIMAL,
+                coefficient,
+            ),
+            method="SLSQP",
+            bounds=bounds,
+            constraints=constraints,
+        )
+
+        if optimal_results.success:
+            optimal_weights = optimal_results.x
+            optimal_sharpe = -optimal_results.fun
+
+            print("\n✅ Optimization Successful!")
+            print(f"Optimal Annualized Sharpe Ratio: {optimal_sharpe:.4f}")
+            print("\nOptimal Weights (Decimal):")
+            optimal_weights_dict = dict(zip(List_stocks, optimal_weights))
+            for symbol, weight in optimal_weights_dict.items():
+                print(f"  {symbol}: {weight:.4f} ({weight*100:.2f}%)")
+
+            optimal_return_annual = (
+                np.sum(mean_returns_decimal * optimal_weights) * coefficient
+            )
+            optimal_volatility_annual = np.sqrt(
+                np.dot(optimal_weights.T, np.dot(cov_matrix_decimal, optimal_weights))
+            ) * np.sqrt(coefficient)
+
+            print(f"\nOptimal Annualized Return: {optimal_return_annual*100:.4f}%")
+            print(
+                f"Optimal Annualized Volatility: {optimal_volatility_annual*100:.4f}%"
+            )
+        else:
+            print(f"\n❌ Optimization Failed. Status: {optimal_results.message}")
 
 
 if __name__ == "__main__":
