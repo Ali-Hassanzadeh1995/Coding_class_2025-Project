@@ -27,14 +27,14 @@ The core program logic is bifurcated based on the user's selected **Analysis Mod
 4.  **Data Download:** Historical Adjusted Close Prices are fetched using `yfinance.download()`.
 5.  **Execute Mode Logic:**
 
-### **Mode 1: Individual Stock Analysis (#Stocks $\geq$ 1)**
+### **Mode 1: Individual Stock Analysis (Number of stocks $\geq$ 1)**
 
 | Calculation | Output |
 | :--- | :--- |
 | **Full-Period Metrics** | Single-value Mean Return, Volatility ($\sigma$), and Annualized Sharpe Ratio for each stock, displayed as a **Bar Chart** for comparison. |
 | **Rolling Time Frame Metrics** | Calculates and plots the **time-series trend** of the Rolling Mean, Volatility, and Annualized Sharpe Ratio over a user-defined window and step. |
 
-### **Mode 2: Portfolio Optimization (#Stocks $\geq$ 2)**
+### **Mode 2: Portfolio Optimization (Number of stocks $\geq$ 2)**
 
 | Calculation | Output |
 | :--- | :--- |
