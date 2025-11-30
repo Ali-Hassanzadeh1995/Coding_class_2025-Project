@@ -272,7 +272,9 @@ if mode == "Individual Stock Analysis":
         )
 
         if time_frame > len(df_simple_return):
-            st.error("Window size is larger than available data points.")
+            st.error(
+                f"Window size is larger than available data points. Value of time frame should be less than {len(df_simple_return)}! "
+            )
         else:
             # Calculate Rolling Metrics
             rolling_mean = df_simple_return.rolling(window=time_frame).mean()
