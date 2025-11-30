@@ -384,10 +384,86 @@ def execute_analysis():
         else:
             # --- Rolling Period Analysis ---
             print(f"\nGiven your data has **{len(DF_Adj_Close)}** periods.")
-            time_frame = get_integer_input("Enter time_frame (window size, e.g., 20): ")
-            time_step = get_integer_input(
-                "Enter time_step (periods to step, e.g., 5): "
-            )
+
+            # --- Get and Validate time_frame ---
+            counter = 0
+            while counter < 3:
+                # Get input for time_frame
+                time_frame_input = input("Enter time_frame (window size, e.g., 20): ")
+
+                # 1. Check for empty input
+                if not time_frame_input:
+                    counter += 1
+                    print("Input cannot be empty.")
+                    continue
+
+                # 2. Check for integer conversion
+                try:
+                    time_frame = int(time_frame_input)
+                except ValueError as e:
+                    # Handle non-integer input or validation errors
+                    counter += 1
+                    print(f"Invalid input: {e}. Please re-enter time_frame.")
+                    continue
+
+                # 3. Check logical constraint (must be positive)
+                if time_frame <= 0:
+                    counter += 1
+                    print("time_frame must be a positive integer.")
+                    continue
+
+                # 4. Check logical constraint (less than total data length)
+                if time_frame >= len(DF_Adj_Close):
+                    counter += 1
+                    print(
+                        f"time_frame ({time_frame}) must be less than the total periods in the data ({len(DF_Adj_Close)})."
+                    )
+                    continue
+
+                if counter == 3:
+                    sys.exit()
+                # If all checks pass, break the loop
+                break
+
+            # --- Get and Validate time_step ---
+            counter = 0
+            while counter < 3:
+                # Get input for time_step
+                time_step_input = input("Enter time_step (periods to step, e.g., 5): ")
+
+                # 1. Check for empty input
+                if not time_step_input:
+                    counter += 1
+                    print("Input cannot be empty.")
+                    continue
+
+                try:
+                    # 2. Check for integer conversion
+                    time_step = int(time_step_input)
+                except ValueError as e:
+                    # Handle non-integer input or validation errors
+                    counter += 1
+                    print(f"Invalid input: {e}. Please re-enter time_step.")
+                    continue
+
+                # 3. Check logical constraint (must be positive)
+                if time_step <= 0:
+                    counter += 1
+                    print("time_step must be a positive integer.")
+
+                # 4. Check logical constraint (less than time_frame)
+                if time_step >= time_frame:
+                    counter += 1
+                    print(
+                        f"time_step ({time_step}) must be less than time_frame ({time_frame})."
+                    )
+                    continue
+
+                if counter == 3:
+                    sys.exit()
+
+                # If all checks pass, break the loop
+                break
 
             try:
                 # Call the rolling metric function to compute stepped results.
