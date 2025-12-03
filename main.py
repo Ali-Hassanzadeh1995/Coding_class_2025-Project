@@ -534,7 +534,7 @@ def execute_analysis():
         if option == "Y":
             print("\n**Entering Custom Weights** (Must be non-negative)")
             counter = 0
-            while np.any(weight) and counter < 3:
+            while not np.any(weight) and counter < 3:
                 for i in range(N_stocks):
                     counter_1 = 0
                     while counter_1 < 3:
